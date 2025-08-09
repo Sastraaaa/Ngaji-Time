@@ -6,10 +6,11 @@ import {
   Alert,
   TextInput,
   FlatList,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState, useMemo } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiService } from "../services/api";
 import { Surah } from "../types/api";
@@ -24,6 +25,23 @@ export default function MushafIndex() {
   useEffect(() => {
     loadSurahs();
   }, []);
+
+  // Handle hardware back button untuk Android - kembali ke beranda
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.replace("/"); // Kembali ke beranda
+        return true; // Prevent default behavior (keluar aplikasi)
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+
+      return () => backHandler.remove();
+    }, [router])
+  );
 
   const loadSurahs = async () => {
     try {
@@ -60,7 +78,8 @@ export default function MushafIndex() {
   }, [surahs, searchQuery]);
 
   const navigateToSurah = (surahNumber: number) => {
-    router.push(`/(mushaf)/surah/${surahNumber}` as any);
+    // Gunakan replace untuk memastikan tidak ada stack surah yang menumpuk
+    router.replace(`/(mushaf)/surah/${surahNumber}` as any);
   };
 
   const renderSurahItem = ({ item: surah }: { item: Surah }) => (
