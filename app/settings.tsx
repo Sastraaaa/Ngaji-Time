@@ -6,9 +6,11 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { cacheService } from "../services/cache";
 import { tw } from "../constants/colors";
@@ -24,6 +26,7 @@ interface SettingsItem {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [cacheInfo, setCacheInfo] = useState<any>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -33,6 +36,23 @@ export default function SettingsPage() {
   useEffect(() => {
     loadCacheInfo();
   }, []);
+
+  // Handle hardware back button untuk Android - kembali ke beranda
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.replace("/"); // Kembali ke beranda
+        return true; // Prevent default behavior (keluar aplikasi)
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+
+      return () => backHandler.remove();
+    }, [router])
+  );
 
   const loadCacheInfo = async () => {
     try {
