@@ -8,9 +8,10 @@ import {
   Modal,
   Linking,
   TextInput,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiService } from "../../../services/api";
@@ -111,6 +112,29 @@ export default function SurahDetailPage() {
       loadBookmarks();
     }
   }, [id, loadSurahDetail, loadBookmarks]);
+
+  // Handle hardware back button untuk Android
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Selalu kembali ke mushaf, tidak peduli dari mana datangnya
+        router.replace("/mushaf");
+        return true; // Prevent default behavior
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+
+      return () => backHandler.remove();
+    }, [router])
+  );
+
+  const handleBackButton = () => {
+    // Selalu kembali ke mushaf untuk konsistensi
+    router.replace("/mushaf");
+  };
 
   // Filter ayahs based on search query
   useEffect(() => {
@@ -240,7 +264,7 @@ export default function SurahDetailPage() {
       <View className="bg-purple-600 px-4 py-3">
         <View className="flex-row items-center justify-between mb-2">
           <TouchableOpacity
-            onPress={() => router.push("/mushaf")}
+            onPress={handleBackButton}
             className="mr-3 p-1"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
