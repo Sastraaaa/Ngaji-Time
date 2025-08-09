@@ -5,10 +5,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useEffect, useState, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../services/storage";
 import { BookmarkAyah } from "../types/api";
@@ -21,6 +22,23 @@ export default function FavoritPage() {
   useEffect(() => {
     loadBookmarks();
   }, []);
+
+  // Handle hardware back button untuk Android - kembali ke beranda
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.replace("/"); // Kembali ke beranda
+        return true; // Prevent default behavior (keluar aplikasi)
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+
+      return () => backHandler.remove();
+    }, [router])
+  );
 
   const loadBookmarks = async () => {
     try {
@@ -58,8 +76,9 @@ export default function FavoritPage() {
   };
 
   const navigateToAyah = (bookmark: BookmarkAyah) => {
+    // Tambahkan parameter from=favorit untuk tracking
     router.push(
-      `/(mushaf)/surah/${bookmark.surahNumber}?ayah=${bookmark.ayahNumber}`
+      `/(mushaf)/surah/${bookmark.surahNumber}?ayah=${bookmark.ayahNumber}&from=favorit` as any
     );
   };
 
