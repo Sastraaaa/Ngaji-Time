@@ -1,0 +1,16 @@
+{
+  "status": true,
+  "request": {
+    "path": "/sholat/kota/semua"
+  },
+  "data": [
+    {
+      "id": "1001",
+      "lokasi": "KAB. LAMPUNG TENGAH"
+    },
+    {
+      "id": "1002",
+      "lokasi": "KAB. LAMPUNG UTARA"
+    }
+  ]
+}
