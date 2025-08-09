@@ -8,12 +8,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../services/storage";
 import { cacheService } from "../services/cache";
 import { LastRead } from "../types/api";
 import { tw } from "../constants/colors";
+import ShalatCard from "../components/ShalatCard";
 
 export default function Index() {
   const router = useRouter();
@@ -22,12 +24,7 @@ export default function Index() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
-  useEffect(() => {
-    loadLastRead();
-    checkAndDownloadSurahs();
-  }, []);
-
-  const loadLastRead = async () => {
+  const loadLastRead = useCallback(async () => {
     try {
       const data = await storageService.getLastRead();
       console.log("Loaded last read from home:", data);
@@ -35,7 +32,18 @@ export default function Index() {
     } catch (error) {
       console.error("Error loading last read:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAndDownloadSurahs();
+  }, []);
+
+  // Reload last read setiap kali halaman menjadi focus
+  useFocusEffect(
+    useCallback(() => {
+      loadLastRead();
+    }, [loadLastRead])
+  );
 
   const checkAndDownloadSurahs = async () => {
     try {
@@ -67,8 +75,9 @@ export default function Index() {
 
   const navigateToLastRead = () => {
     if (lastRead) {
+      // Tambahkan parameter from=home untuk tracking
       router.push(
-        `/(mushaf)/surah/${lastRead.surahNumber}?ayah=${lastRead.ayahNumber}` as any
+        `/(mushaf)/surah/${lastRead.surahNumber}?ayah=${lastRead.ayahNumber}&from=home` as any
       );
     }
   };
@@ -162,6 +171,9 @@ export default function Index() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Jadwal Shalat Card */}
+        <ShalatCard onPress={() => router.push("/jadwal-shalat" as any)} />
 
         {/* Menu Grid */}
         <View className="px-6">
