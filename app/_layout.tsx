@@ -128,6 +128,13 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        <Tabs.Screen
+          name="jadwal-shalat"
+          options={{
+            href: null, // Hide from tabs
+            headerShown: false,
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
