@@ -9,7 +9,7 @@ import {
   BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { cacheService } from "../services/cache";
@@ -38,10 +38,39 @@ export default function SettingsPage() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
-  useEffect(() => {
-    loadCacheInfo();
-    loadCacheStats();
+  // Load data setiap kali halaman difokuskan
+  const loadCacheInfo = useCallback(async () => {
+    try {
+      const stats = await cacheService.getCacheStatistics();
+      // Get real last updated dari cache metadata
+      const metadata = await cacheService.getCacheMetadata();
+
+      setCacheInfo({
+        totalSurahs: stats.cachedSurahs,
+        totalAyahs: 0, // Not available in optimized version
+        lastUpdated: metadata.lastUpdated, // Real timestamp from cache
+        totalSize: stats.totalSize,
+      });
+    } catch (error) {
+      console.error("Error loading cache info:", error);
+    }
   }, []);
+
+  const loadCacheStats = useCallback(async () => {
+    try {
+      const stats = await cacheService.getCacheStatistics();
+      setCacheStats(stats);
+    } catch (error) {
+      console.error("Error loading cache stats:", error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCacheInfo();
+      loadCacheStats();
+    }, [loadCacheInfo, loadCacheStats])
+  );
 
   // Handle hardware back button untuk Android - kembali ke beranda
   useFocusEffect(
@@ -59,27 +88,6 @@ export default function SettingsPage() {
       return () => backHandler.remove();
     }, [router])
   );
-
-  const loadCacheInfo = async () => {
-    try {
-      const stats = await cacheService.getCacheStatistics();
-      setCacheInfo({
-        totalSurahs: stats.cachedSurahs,
-        totalAyahs: 0, // Not available in optimized version
-      });
-    } catch (error) {
-      console.error("Error loading cache info:", error);
-    }
-  };
-
-  const loadCacheStats = async () => {
-    try {
-      const stats = await cacheService.getCacheStatistics();
-      setCacheStats(stats);
-    } catch (error) {
-      console.error("Error loading cache stats:", error);
-    }
-  };
 
   const handleDownloadAll = async () => {
     Alert.alert(
@@ -99,7 +107,9 @@ export default function SettingsPage() {
                 setDownloadProgress(progress);
               });
 
-              await loadCacheStats(); // Refresh stats
+              // Refresh semua data setelah download
+              await loadCacheStats();
+              await loadCacheInfo();
               Alert.alert("Berhasil", "Semua surah telah berhasil diunduh!");
             } catch (error) {
               console.error("Download error:", error);
@@ -131,6 +141,7 @@ export default function SettingsPage() {
             try {
               setLoading(true);
               await cacheService.clearCache();
+              // Refresh semua data setelah clear cache
               await loadCacheInfo();
               await loadCacheStats();
               Alert.alert("Berhasil", "Cache telah berhasil dihapus!");
@@ -197,9 +208,16 @@ export default function SettingsPage() {
         {
           title: "Ukuran Cache",
           subtitle: cacheInfo
-            ? `Terakhir diperbarui: ${
-                cacheInfo.lastUpdated
-                  ? new Date(cacheInfo.lastUpdated).toLocaleDateString("id-ID")
+            ? `${cacheInfo.totalSize} • Terakhir diperbarui: ${
+                cacheInfo.lastUpdated && cacheInfo.lastUpdated > 0
+                  ? new Date(cacheInfo.lastUpdated).toLocaleDateString(
+                      "id-ID",
+                      {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      }
+                    )
                   : "Belum pernah"
               }`
             : "Memuat...",
