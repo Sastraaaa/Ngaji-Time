@@ -58,7 +58,7 @@ class ApiService {
     }
   }
 
-  // Mendapatkan detail surah beserta semua ayatnya (dengan cache)
+  // Mendapatkan detail surah beserta semua ayatnya (dengan cache dan auto-download)
   async getSurahDetail(surahNumber: number): Promise<SurahDetailResponse> {
     try {
       // Cek cache terlebih dahulu
@@ -68,7 +68,7 @@ class ApiService {
         return {
           code: 200,
           status: "OK",
-          message: "Success from cache",
+          message: "Success from cache (offline)",
           data: cachedAyahs,
         };
       }
@@ -114,14 +114,22 @@ class ApiService {
         `Berhasil mengambil ${ayahs.length} ayat untuk surah ${surahNumber}`
       );
 
-      // Cache hasilnya
+      // Cache hasilnya untuk offline access
       await cacheService.cacheSurahDetail(surahNumber, ayahs);
+
+      // Auto-download mark for statistics
+      cacheService.autoDownloadSurah(surahNumber).catch((error) => {
+        console.warn(
+          `Failed to mark auto-download for Surah ${surahNumber}:`,
+          error
+        );
+      });
 
       // Return dalam format yang diharapkan
       return {
         code: 200,
         status: "OK",
-        message: "Success",
+        message: "Success (auto-cached)",
         data: ayahs,
       };
     } catch (error) {
