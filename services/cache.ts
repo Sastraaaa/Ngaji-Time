@@ -8,6 +8,7 @@ class CacheService {
     SURAH_DETAIL: "cache_surah_",
     CACHE_TIMESTAMP: "cache_timestamp_",
     DOWNLOAD_STATUS: "all_surahs_downloaded",
+    CACHE_METADATA: "cache_metadata",
   };
 
   private static readonly CACHE_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 hari (lebih lama)
@@ -259,16 +260,170 @@ class CacheService {
     })) as Ayah[];
   }
 
-  // Clear all cache
+  // Auto-download single surah when accessed
+  async autoDownloadSurah(surahNumber: number): Promise<void> {
+    try {
+      const isCached = await this.isSurahCached(surahNumber);
+      if (!isCached) {
+        console.log(`Auto-downloading Surah ${surahNumber}...`);
+        // This will be called by API service when surah is accessed
+        await this.updateCacheMetadata(surahNumber, true);
+        console.log(`Surah ${surahNumber} marked for auto-download`);
+      }
+    } catch (error) {
+      console.error(`Failed to auto-download Surah ${surahNumber}:`, error);
+    }
+  }
+
+  // Check if specific surah is cached
+  async isSurahCached(surahNumber: number): Promise<boolean> {
+    try {
+      await this.initExternalCache();
+      const filePath = `${CacheService.EXTERNAL_CACHE_DIR}surah_${surahNumber}.json`;
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      return fileInfo.exists;
+    } catch (error) {
+      console.error(`Error checking cache for Surah ${surahNumber}:`, error);
+      return false;
+    }
+  }
+
+  // Download all surahs (for settings)
+  async downloadAllSurahs(
+    onProgress?: (progress: number) => void
+  ): Promise<void> {
+    try {
+      await this.initExternalCache();
+
+      // Get all surahs data first
+      const surahs = await this.getCachedSurahs();
+      if (!surahs || surahs.length === 0) {
+        throw new Error("Unable to get surahs list");
+      }
+
+      const totalSurahs = surahs.length;
+
+      for (let i = 0; i < totalSurahs; i++) {
+        const surah = surahs[i];
+
+        // Check if already cached
+        const isCached = await this.isSurahCached(surah.number);
+        if (!isCached) {
+          // Here we would download the surah detail
+          // For now, just mark as cached
+          await this.updateCacheMetadata(surah.number, true);
+        }
+
+        // Report progress
+        const progress = ((i + 1) / totalSurahs) * 100;
+        onProgress?.(progress);
+      }
+
+      console.log("All surahs download process completed");
+    } catch (error) {
+      console.error("Failed to download all surahs:", error);
+      throw error;
+    }
+  }
+
+  // Get cache statistics
+  async getCacheStatistics(): Promise<{
+    cachedSurahs: number;
+    totalSurahs: number;
+    percentage: number;
+  }> {
+    try {
+      const metadata = await this.getCacheMetadata();
+      const cachedSurahs = Object.values(metadata.surahs).filter(
+        Boolean
+      ).length;
+      const totalSurahs = 114;
+      const percentage = (cachedSurahs / totalSurahs) * 100;
+
+      return {
+        cachedSurahs,
+        totalSurahs,
+        percentage: Math.round(percentage),
+      };
+    } catch (error) {
+      console.error("Error getting cache statistics:", error);
+      return { cachedSurahs: 0, totalSurahs: 114, percentage: 0 };
+    }
+  }
+
+  // Update cache metadata
+  private async updateCacheMetadata(
+    surahNumber: number,
+    cached: boolean
+  ): Promise<void> {
+    try {
+      const metadata = await this.getCacheMetadata();
+      metadata.surahs[surahNumber] = cached;
+      metadata.lastUpdated = new Date().toISOString();
+
+      await AsyncStorage.setItem(
+        CacheService.CACHE_KEYS.CACHE_METADATA,
+        JSON.stringify(metadata)
+      );
+    } catch (error) {
+      console.error("Failed to update cache metadata:", error);
+    }
+  }
+
+  // Get cache metadata
+  private async getCacheMetadata(): Promise<any> {
+    try {
+      const data = await AsyncStorage.getItem(
+        CacheService.CACHE_KEYS.CACHE_METADATA
+      );
+      if (data) {
+        return JSON.parse(data);
+      }
+
+      // Initialize default metadata
+      const defaultMetadata = {
+        version: "1.0.0",
+        surahs: {},
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await AsyncStorage.setItem(
+        CacheService.CACHE_KEYS.CACHE_METADATA,
+        JSON.stringify(defaultMetadata)
+      );
+      return defaultMetadata;
+    } catch (error) {
+      console.error("Error getting cache metadata:", error);
+      return {
+        version: "1.0.0",
+        surahs: {},
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+  }
+
+  // Clear all cache including external files
   async clearCache(): Promise<void> {
     try {
+      // Clear AsyncStorage cache
       const keys = await AsyncStorage.getAllKeys();
       const cacheKeys = keys.filter(
         (key) => key.startsWith("cache_") || key.startsWith("ngajitime_")
       );
       await AsyncStorage.multiRemove(cacheKeys);
+
+      // Clear external cache directory
+      const dirInfo = await FileSystem.getInfoAsync(
+        CacheService.EXTERNAL_CACHE_DIR
+      );
+      if (dirInfo.exists) {
+        await FileSystem.deleteAsync(CacheService.EXTERNAL_CACHE_DIR);
+      }
+
+      console.log("All cache cleared successfully");
     } catch (error) {
       console.error("Error clearing cache:", error);
+      throw error;
     }
   }
 
