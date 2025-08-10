@@ -131,10 +131,10 @@ NgajiTime/
 
 - [ ] Mode gelap/terang
 - [ ] Pengaturan ukuran font
-- [ ] Export/import bookmark
-- [ ] Notifikasi pengingat baca
+- [ ] Notifikasi pengingat baca dan jadwal shalat
 - [ ] Jadwal sholat
 - [ ] Kiblat direction
+- [ ] Peta masjid
 
 ## Kontribusi
 
@@ -147,9 +147,3 @@ NgajiTime/
 ## Lisensi
 
 Distributed under the MIT License. See `LICENSE` for more information.
-
-## Acknowledgments
-
-- API Al-Qur'an dari [Quran.com](https://quran.com)
-- Icons dari [Ionicons](https://ionic.io/ionicons)
-- Tailwind CSS untuk styling
