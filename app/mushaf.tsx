@@ -1,4 +1,4 @@
-import {
+import React, {
   View,
   Text,
   TouchableOpacity,
@@ -10,10 +10,65 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiService } from "../services/api";
 import { Surah } from "../types/api";
+import { PerformanceTracker } from "../utils/performance";
+
+// Memoized SurahCard component untuk prevent unnecessary re-renders
+const SurahCard = memo(
+  ({ surah, onPress }: { surah: Surah; onPress: (surah: Surah) => void }) => {
+    const handlePress = useCallback(() => {
+      onPress(surah);
+    }, [surah, onPress]);
+
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        className="bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"
+        activeOpacity={0.7}
+      >
+        <View className="flex-row justify-between items-start">
+          <View className="flex-1">
+            <Text className="text-2xl text-right mb-2 text-gray-800 font-medium">
+              {surah.name.short}
+            </Text>
+            <Text className="text-lg font-bold text-gray-900 mb-1">
+              {surah.name.transliteration.id}
+            </Text>
+            <Text className="text-gray-600 mb-2">
+              {surah.name.translation.id}
+            </Text>
+            <View className="flex-row items-center">
+              <View className="bg-blue-50 px-2 py-1 rounded-full mr-2">
+                <Text className="text-blue-600 text-xs font-medium">
+                  {surah.numberOfVerses} ayat
+                </Text>
+              </View>
+              <View className="bg-green-50 px-2 py-1 rounded-full">
+                <Text className="text-green-600 text-xs font-medium capitalize">
+                  {surah.revelation.id}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View className="items-center justify-center w-12 h-12 bg-blue-100 rounded-full ml-3">
+            <Text className="text-blue-600 font-bold text-sm">
+              {surah.number}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison untuk optimize re-renders
+    return prevProps.surah.number === nextProps.surah.number;
+  }
+);
+
+SurahCard.displayName = "SurahCard";
 
 export default function MushafIndex() {
   const router = useRouter();
@@ -77,46 +132,21 @@ export default function MushafIndex() {
     );
   }, [surahs, searchQuery]);
 
-  const navigateToSurah = (surahNumber: number) => {
-    // Gunakan replace untuk memastikan tidak ada stack surah yang menumpuk
-    router.replace(`/(mushaf)/surah/${surahNumber}` as any);
-  };
+  // Optimized navigation dengan performance tracking
+  const navigateToSurah = useCallback(
+    (surah: Surah) => {
+      PerformanceTracker.startTimer(`Navigate-Surah-${surah.number}`);
+      router.replace(`/(mushaf)/surah/${surah.number}` as any);
+    },
+    [router]
+  );
 
-  const renderSurahItem = ({ item: surah }: { item: Surah }) => (
-    <TouchableOpacity
-      onPress={() => navigateToSurah(surah.number)}
-      className="bg-white rounded-lg mb-3 p-4 shadow-sm border border-gray-200"
-    >
-      <View className="flex-row items-center">
-        {/* Nomor Surah */}
-        <View className="bg-green-600 rounded-full w-10 h-10 justify-center items-center mr-4">
-          <Text className="text-white font-bold text-sm">{surah.number}</Text>
-        </View>
-
-        {/* Info Surah */}
-        <View className="flex-1">
-          <View className="flex-row justify-between items-start mb-1">
-            <Text className="text-gray-900 font-semibold text-base">
-              {surah.name.transliteration.id}
-            </Text>
-            <Text className="text-green-700 text-lg font-arabic">
-              {surah.name.short}
-            </Text>
-          </View>
-
-          <Text className="text-gray-600 text-sm mb-1">
-            {surah.name.translation.id}
-          </Text>
-
-          <View className="flex-row justify-between items-center">
-            <Text className="text-gray-500 text-xs">
-              {surah.numberOfVerses} Ayat • {surah.revelation.id}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color="#6b7280" />
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
+  // Optimized render item menggunakan SurahCard
+  const renderSurahItem = useCallback(
+    ({ item: surah }: { item: Surah }) => (
+      <SurahCard surah={surah} onPress={navigateToSurah} />
+    ),
+    [navigateToSurah]
   );
 
   if (loading) {
@@ -182,13 +212,22 @@ export default function MushafIndex() {
         </Text>
       </View>
 
-      {/* Surah List */}
+      {/* Surah List dengan FlatList yang dioptimasi untuk performa */}
       <FlatList
         data={filteredSurahs}
         renderItem={renderSurahItem}
-        keyExtractor={(item) => item.number.toString()}
+        keyExtractor={(item: Surah) => item.number.toString()}
         contentContainerStyle={{ padding: 16 }}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={15}
+        getItemLayout={(data, index) => ({
+          length: 120, // estimated item height
+          offset: 120 * index,
+          index,
+        })}
         ListEmptyComponent={
           <View className="flex-1 justify-center items-center py-20">
             <Ionicons name="search" size={48} color="#6b7280" />
