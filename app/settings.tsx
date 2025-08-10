@@ -62,8 +62,11 @@ export default function SettingsPage() {
 
   const loadCacheInfo = async () => {
     try {
-      const info = await cacheService.getCacheInfo();
-      setCacheInfo(info);
+      const stats = await cacheService.getCacheStatistics();
+      setCacheInfo({
+        totalSurahs: stats.cachedSurahs,
+        totalAyahs: 0, // Not available in optimized version
+      });
     } catch (error) {
       console.error("Error loading cache info:", error);
     }
