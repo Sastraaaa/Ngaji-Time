@@ -221,7 +221,7 @@ export default function SettingsPage() {
           onPress: () => {
             Alert.alert(
               "NgajiTime",
-              "Aplikasi untuk membaca Al-Qur'an, tahfidz, dan mencari masjid terdekat.\\n\\nDikembangkan dengan React Native & Expo."
+              "Aplikasi untuk membaca Al-Qur'an, tahfidz, dan mencari masjid terdekat. Dikembangkan dengan React Native & Expo."
             );
           },
         },
