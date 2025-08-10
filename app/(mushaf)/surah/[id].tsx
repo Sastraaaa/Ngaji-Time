@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -9,14 +8,120 @@ import {
   Linking,
   TextInput,
   BackHandler,
+  FlatList,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import { useEffect, useState, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  memo,
+} from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { apiService } from "../../../services/api";
 import { storageService } from "../../../services/storage";
 import { Ayah } from "../../../types/api";
+import { PerformanceTracker } from "../../../utils/performance";
+
+// Memoized AyahCard component untuk prevent unnecessary re-renders
+const AyahCard = memo(
+  ({
+    ayahData,
+    isBookmarked,
+    isTarget,
+    onBookmarkToggle,
+    onTafsirOpen,
+    onPlayAudio,
+  }: {
+    ayahData: Ayah;
+    isBookmarked: boolean;
+    isTarget: boolean;
+    onBookmarkToggle: (ayahNumber: number) => void;
+    onTafsirOpen: (ayahData: Ayah) => void;
+    onPlayAudio: (audioUrl: string, ayahNumber: number) => void;
+  }) => {
+    return (
+      <View
+        className={`bg-white mx-4 mt-4 p-6 rounded-lg border ${
+          isTarget ? "border-purple-400 bg-purple-50" : "border-gray-200"
+        }`}
+      >
+        {/* Header with Ayah Number and Action Buttons */}
+        <View className="flex-row items-center justify-between mb-4">
+          {/* Ayah Number */}
+          <View className="bg-purple-600 px-3 py-1 rounded-full">
+            <Text className="text-white text-sm font-bold">
+              {ayahData.number.inSurah}
+            </Text>
+          </View>
+
+          <View className="flex-row space-x-2">
+            {/* Audio Button */}
+            <TouchableOpacity
+              onPress={() =>
+                onPlayAudio(ayahData.audio.primary, ayahData.number.inSurah)
+              }
+              className="bg-green-600 p-2 rounded-lg"
+            >
+              <Ionicons name="play" size={20} color="white" />
+            </TouchableOpacity>
+
+            {/* Bookmark Button */}
+            <TouchableOpacity
+              onPress={() => onBookmarkToggle(ayahData.number.inSurah)}
+              className={`p-2 rounded-lg ${
+                isBookmarked ? "bg-red-600" : "bg-gray-600"
+              }`}
+            >
+              <Ionicons
+                name={isBookmarked ? "heart" : "heart-outline"}
+                size={20}
+                color="white"
+              />
+            </TouchableOpacity>
+
+            {/* Tafsir Button */}
+            <TouchableOpacity
+              onPress={() => onTafsirOpen(ayahData)}
+              className="bg-blue-600 p-2 rounded-lg"
+            >
+              <Ionicons name="book" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Arabic Text */}
+        <Text className="text-2xl text-right text-gray-900 font-arabic leading-loose mb-4">
+          {ayahData.text.arab}
+        </Text>
+
+        {/* Transliteration */}
+        <Text className="text-gray-700 italic text-base leading-relaxed mb-2">
+          {ayahData.text.transliteration.en}
+        </Text>
+
+        {/* Translation */}
+        <Text className="text-gray-800 text-base leading-relaxed">
+          {ayahData.translation.id}
+        </Text>
+      </View>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison untuk optimasi rendering
+    return (
+      prevProps.ayahData.number.inSurah === nextProps.ayahData.number.inSurah &&
+      prevProps.isBookmarked === nextProps.isBookmarked &&
+      prevProps.isTarget === nextProps.isTarget
+    );
+  }
+);
+
+AyahCard.displayName = "AyahCard";
 
 export default function SurahDetailPage() {
   const { id, ayah } = useLocalSearchParams<{ id: string; ayah?: string }>();
@@ -32,8 +137,8 @@ export default function SurahDetailPage() {
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredAyahs, setFilteredAyahs] = useState<Ayah[]>([]);
   const [showSearch, setShowSearch] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
   const loadSurahDetail = useCallback(async () => {
     try {
@@ -136,22 +241,162 @@ export default function SurahDetailPage() {
     router.replace("/mushaf");
   };
 
-  // Filter ayahs based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredAyahs(ayahs);
-    } else {
-      const filtered = ayahs.filter((ayah) => {
-        const searchLower = searchQuery.toLowerCase();
-        return (
-          ayah.text.arab.includes(searchQuery) ||
-          ayah.translation.id.toLowerCase().includes(searchLower) ||
-          ayah.number.inSurah.toString().includes(searchQuery)
-        );
-      });
-      setFilteredAyahs(filtered);
-    }
+  // Memoized filtered ayahs untuk performa optimal
+  const filteredAyahsMemo = useMemo(() => {
+    if (!searchQuery.trim()) return ayahs;
+
+    const searchLower = searchQuery.toLowerCase();
+    return ayahs.filter((ayah) => {
+      return (
+        ayah.text.arab.includes(searchQuery) ||
+        ayah.translation.id.toLowerCase().includes(searchLower) ||
+        ayah.number.inSurah.toString().includes(searchQuery)
+      );
+    });
   }, [ayahs, searchQuery]);
+
+  // Optimized bookmark toggle
+  const toggleBookmarkOptimized = useCallback(
+    async (ayahNumber: number) => {
+      return PerformanceTracker.measureAsync(
+        `Bookmark-Toggle-${ayahNumber}`,
+        async () => {
+          try {
+            const surahNumber = parseInt(id);
+            const isBookmarked = bookmarkedAyahs.has(ayahNumber);
+
+            if (isBookmarked) {
+              await storageService.removeBookmark(surahNumber, ayahNumber);
+              setBookmarkedAyahs((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(ayahNumber);
+                return newSet;
+              });
+            } else {
+              // Ambil data ayah untuk bookmark
+              const ayahData = ayahs.find(
+                (a) => a.number.inSurah === ayahNumber
+              );
+              if (ayahData) {
+                const surahName =
+                  ayahData.surah?.name?.transliteration?.id ||
+                  ayahs[0]?.surah?.name?.transliteration?.id ||
+                  `Surah ${id}`;
+
+                await storageService.addBookmark({
+                  surahNumber,
+                  ayahNumber,
+                  surahName,
+                  text: ayahData.text.arab,
+                  translation: ayahData.translation.id,
+                });
+                setBookmarkedAyahs((prev) => new Set([...prev, ayahNumber]));
+              }
+            }
+
+            Alert.alert(
+              "Berhasil",
+              isBookmarked
+                ? "Bookmark berhasil dihapus"
+                : "Ayat berhasil dibookmark"
+            );
+          } catch (error) {
+            console.error("Error toggling bookmark:", error);
+            Alert.alert("Error", "Gagal mengubah bookmark");
+          }
+        }
+      );
+    },
+    [id, bookmarkedAyahs, ayahs]
+  );
+
+  // Optimized tafsir modal
+  const openTafsirOptimized = useCallback((ayahData: Ayah) => {
+    setSelectedTafsir(ayahData);
+    setTafsirModalVisible(true);
+  }, []);
+
+  const playAudio = useCallback(
+    async (audioUrl: string, ayahNumber: number) => {
+      try {
+        Alert.alert(
+          "Audio Murottal",
+          `Memutar audio untuk ayat ${ayahNumber}. Audio akan dibuka di aplikasi pemutar default.`,
+          [
+            { text: "Batal", style: "cancel" },
+            {
+              text: "Putar",
+              onPress: () => {
+                Linking.openURL(audioUrl);
+              },
+            },
+          ]
+        );
+      } catch (error) {
+        console.error("Error playing audio:", error);
+        Alert.alert("Error", "Gagal membuka audio");
+      }
+    },
+    []
+  );
+
+  // Update render item untuk menggunakan fungsi yang benar
+  const renderAyahItem = useCallback(
+    ({ item: ayahData }: { item: Ayah }) => {
+      const isBookmarked = bookmarkedAyahs.has(ayahData.number.inSurah);
+      const isTarget = ayah && parseInt(ayah) === ayahData.number.inSurah;
+
+      return (
+        <AyahCard
+          ayahData={ayahData}
+          isBookmarked={isBookmarked}
+          isTarget={!!isTarget}
+          onBookmarkToggle={toggleBookmarkOptimized}
+          onTafsirOpen={openTafsirOptimized}
+          onPlayAudio={playAudio}
+        />
+      );
+    },
+    [
+      bookmarkedAyahs,
+      ayah,
+      toggleBookmarkOptimized,
+      openTafsirOptimized,
+      playAudio,
+    ]
+  );
+
+  // Header component untuk FlatList
+  const ListHeaderComponent = useCallback(
+    () => (
+      <View>
+        {/* Basmallah for non-Taubah */}
+        {parseInt(id) !== 9 && (
+          <View className="bg-white mx-4 mt-4 p-6 rounded-lg border border-gray-200">
+            <Text className="text-2xl text-center text-gray-800 font-arabic leading-10">
+              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+            </Text>
+            <Text className="text-center text-gray-600 text-sm mt-2">
+              Dengan nama Allah Yang Maha Pengasih, Maha Penyayang
+            </Text>
+          </View>
+        )}
+
+        {/* Search result info */}
+        {searchQuery.length > 0 && filteredAyahsMemo.length === 0 && (
+          <View className="bg-white mx-4 mt-4 p-6 rounded-lg border border-gray-200">
+            <Text className="text-center text-gray-500">
+              Tidak ada ayat yang ditemukan untuk &quot;{searchQuery}&quot;
+            </Text>
+            <Text className="text-center text-gray-400 text-sm mt-2">
+              Coba kata kunci lain atau nomor ayat
+            </Text>
+          </View>
+        )}
+      </View>
+    ),
+    [id, searchQuery, filteredAyahsMemo.length]
+  );
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -160,75 +405,6 @@ export default function SurahDetailPage() {
   const clearSearch = () => {
     setSearchQuery("");
     setShowSearch(false);
-  };
-
-  const playAudio = async (audioUrl: string, ayahNumber: number) => {
-    try {
-      Alert.alert(
-        "Audio Murottal",
-        `Memutar audio untuk ayat ${ayahNumber}. Audio akan dibuka di aplikasi pemutar default.`,
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: "Putar",
-            onPress: () => {
-              Linking.openURL(audioUrl);
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      Alert.alert("Error", "Gagal membuka audio");
-    }
-  };
-
-  const toggleBookmark = async (ayahData: Ayah) => {
-    try {
-      const isBookmarked = bookmarkedAyahs.has(ayahData.number.inSurah);
-
-      if (isBookmarked) {
-        await storageService.removeBookmark(
-          parseInt(id),
-          ayahData.number.inSurah
-        );
-        setBookmarkedAyahs((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(ayahData.number.inSurah);
-          return newSet;
-        });
-      } else {
-        // Ambil nama surah dari ayahs yang sudah dimuat atau fallback
-        const surahName =
-          ayahData.surah?.name?.transliteration?.id ||
-          ayahs[0]?.surah?.name?.transliteration?.id ||
-          `Surah ${id}`;
-
-        await storageService.addBookmark({
-          surahNumber: parseInt(id),
-          ayahNumber: ayahData.number.inSurah,
-          surahName: surahName,
-          text: ayahData.text.arab,
-          translation: ayahData.translation.id,
-        });
-        setBookmarkedAyahs(
-          (prev) => new Set([...prev, ayahData.number.inSurah])
-        );
-      }
-
-      Alert.alert(
-        "Berhasil",
-        isBookmarked ? "Bookmark berhasil dihapus" : "Ayat berhasil dibookmark"
-      );
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-      Alert.alert("Error", "Gagal mengubah bookmark");
-    }
-  };
-
-  const openTafsir = (ayahData: Ayah) => {
-    setSelectedTafsir(ayahData);
-    setTafsirModalVisible(true);
   };
 
   if (loading) {
@@ -314,7 +490,8 @@ export default function SurahDetailPage() {
             </View>
             {searchQuery.length > 0 && (
               <Text className="text-purple-200 text-xs mt-1">
-                Ditemukan {filteredAyahs.length} ayat dari {ayahs.length} ayat
+                Ditemukan {filteredAyahsMemo.length} ayat dari {ayahs.length}{" "}
+                ayat
               </Text>
             )}
           </View>
@@ -331,112 +508,36 @@ export default function SurahDetailPage() {
         )}
       </View>
 
-      {/* Scroll to specific ayah if provided */}
-      <ScrollView className="flex-1" contentInsetAdjustmentBehavior="automatic">
-        {/* Basmallah for non-Taubah */}
-        {parseInt(id) !== 9 && (
-          <View className="bg-white mx-4 mt-4 p-6 rounded-lg border border-gray-200">
-            <Text className="text-2xl text-center text-gray-800 font-arabic leading-10">
-              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-            </Text>
-            <Text className="text-center text-gray-600 text-sm mt-2">
-              Dengan nama Allah Yang Maha Pengasih, Maha Penyayang
-            </Text>
-          </View>
-        )}
-
-        {/* Ayahs */}
-        <View className="px-4 pb-4">
-          {searchQuery.length > 0 && filteredAyahs.length === 0 ? (
-            <View className="bg-white mt-4 p-6 rounded-lg border border-gray-200">
-              <Text className="text-center text-gray-500">
-                Tidak ada ayat yang ditemukan untuk &quot;{searchQuery}&quot;
-              </Text>
-              <Text className="text-center text-gray-400 text-sm mt-2">
-                Coba kata kunci lain atau nomor ayat
-              </Text>
-            </View>
-          ) : (
-            filteredAyahs.map((ayahData, index) => {
-              const isBookmarked = bookmarkedAyahs.has(ayahData.number.inSurah);
-              const isTarget =
-                ayah && parseInt(ayah) === ayahData.number.inSurah;
-
-              return (
-                <View
-                  key={ayahData.number.inSurah}
-                  className={`bg-white mt-4 p-6 rounded-lg border ${
-                    isTarget
-                      ? "border-purple-400 bg-purple-50"
-                      : "border-gray-200"
-                  }`}
-                >
-                  {/* Ayah Header */}
-                  <View className="flex-row items-center justify-between mb-4">
-                    <View className="bg-purple-600 px-3 py-1 rounded-full">
-                      <Text className="text-white text-sm font-bold">
-                        {ayahData.number.inSurah}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row space-x-2">
-                      {/* Audio Button */}
-                      <TouchableOpacity
-                        onPress={() =>
-                          playAudio(
-                            ayahData.audio.primary,
-                            ayahData.number.inSurah
-                          )
-                        }
-                        className="bg-green-600 p-2 rounded-lg"
-                      >
-                        <Ionicons name="play" size={20} color="white" />
-                      </TouchableOpacity>
-
-                      {/* Bookmark Button */}
-                      <TouchableOpacity
-                        onPress={() => toggleBookmark(ayahData)}
-                        className={`p-2 rounded-lg ${
-                          isBookmarked ? "bg-red-600" : "bg-gray-600"
-                        }`}
-                      >
-                        <Ionicons
-                          name={isBookmarked ? "heart" : "heart-outline"}
-                          size={20}
-                          color="white"
-                        />
-                      </TouchableOpacity>
-
-                      {/* Tafsir Button */}
-                      <TouchableOpacity
-                        onPress={() => openTafsir(ayahData)}
-                        className="bg-blue-600 p-2 rounded-lg"
-                      >
-                        <Ionicons name="book" size={20} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Arabic Text */}
-                  <Text className="text-2xl text-right text-gray-900 font-arabic leading-loose mb-4">
-                    {ayahData.text.arab}
-                  </Text>
-
-                  {/* Transliteration */}
-                  <Text className="text-gray-700 italic text-base leading-relaxed mb-2">
-                    {ayahData.text.transliteration.en}
-                  </Text>
-
-                  {/* Translation */}
-                  <Text className="text-gray-800 text-base leading-relaxed">
-                    {ayahData.translation.id}
-                  </Text>
-                </View>
-              );
-            })
-          )}
-        </View>
-      </ScrollView>
+      {/* Konten Surah dengan FlatList untuk performa optimal */}
+      <FlatList
+        ref={flatListRef}
+        data={filteredAyahsMemo}
+        renderItem={renderAyahItem}
+        ListHeaderComponent={ListHeaderComponent}
+        keyExtractor={(item) => `ayah-${item.number.inSurah}`}
+        getItemLayout={(data, index) => ({
+          length: 200,
+          offset: 200 * index,
+          index,
+        })}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={5}
+        windowSize={10}
+        onScrollToIndexFailed={(info) => {
+          console.warn("Scroll to index failed:", info);
+          // Fallback scroll
+          setTimeout(() => {
+            flatListRef.current?.scrollToOffset({
+              offset: info.index * 200,
+              animated: true,
+            });
+          }, 100);
+        }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        contentInsetAdjustmentBehavior="automatic"
+      />
 
       {/* Tafsir Modal */}
       <Modal
