@@ -7,8 +7,8 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useEffect, useState, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../../services/storage";
 import { apiService } from "../../services/api";
@@ -25,6 +25,23 @@ export default function TahfidzPage() {
   useEffect(() => {
     loadTargets();
   }, []);
+
+  // Auto-refresh when user returns to this page from detail
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh targets tanpa loading indicator untuk seamless UX
+      const refreshTargets = async () => {
+        try {
+          const data = await storageService.getTahfidzTargets();
+          setTargets(data);
+        } catch (error) {
+          console.error("Error refreshing targets:", error);
+        }
+      };
+
+      refreshTargets();
+    }, [])
+  );
 
   const loadTargets = async () => {
     try {
