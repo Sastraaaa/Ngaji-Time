@@ -5,9 +5,12 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { cacheService } from "../services/cache";
 import { colors } from "../constants/colors";
+import { useColorScheme } from "react-native";
 import "./global.css";
 
 export default function RootLayout() {
+  const colorScheme = useColorScheme(); // Untuk  mendeteksi tema pada device
+
   useEffect(() => {
     // Initialize offline capabilities on app startup
     const initializeOfflineFeatures = async () => {
@@ -24,7 +27,7 @@ export default function RootLayout() {
   }, []);
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style={colorScheme === "dark" ? "dark" : "light"} />
       <Tabs
         screenOptions={{
           headerStyle: {
@@ -103,35 +106,35 @@ export default function RootLayout() {
         <Tabs.Screen
           name="(mushaf)"
           options={{
-            href: null, // Hide from tabs
+            href: null,
             headerShown: false,
           }}
         />
         <Tabs.Screen
           name="(peta)"
           options={{
-            href: null, // Hide from tabs
+            href: null,
             headerShown: false,
           }}
         />
         <Tabs.Screen
           name="(tahfidz)"
           options={{
-            href: null, // Hide from tabs
+            href: null,
             headerShown: false,
           }}
         />
         <Tabs.Screen
           name="peta"
           options={{
-            href: null, // Hide from tabs
+            href: null,
             headerShown: false,
           }}
         />
         <Tabs.Screen
           name="jadwal-shalat"
           options={{
-            href: null, // Hide from tabs
+            href: null,
             headerShown: false,
           }}
         />
