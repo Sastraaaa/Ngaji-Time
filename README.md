@@ -26,11 +26,10 @@ NgajiTime adalah aplikasi mobile untuk membaca Al-Qur'an dengan fitur tahfidz tr
 - **Koleksi Personal**: Akses cepat ke ayat favorit
 - **Navigasi Mudah**: Langsung ke ayat dari daftar favorit
 
-### 🗺️ Peta Masjid
+### ⌛ Jadwal Shalat
 
-- **Lokasi Masjid**: Temukan masjid terdekat
-- **Google Maps Integration**: Navigasi ke masjid terpilih
-- **Informasi Detail**: Nama dan alamat masjid
+- **Jadwal Dinamis**: Jadwal akan mengikuti dimana tempat kalian berada saat ini
+- **Jadwal Tambahan**: Jadwal Tambahan seperti Imsak,Waktu Dhuha
 
 ## Setup Project
 
