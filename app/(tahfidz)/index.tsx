@@ -5,10 +5,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  TextInput,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useEffect, useState, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../../services/storage";
 import { apiService } from "../../services/api";
@@ -21,10 +23,48 @@ export default function TahfidzPage() {
   const [showSurahList, setShowSurahList] = useState(false);
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [loadingSurahs, setLoadingSurahs] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     loadTargets();
   }, []);
+
+  // Auto-refresh when user returns to this page from detail
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh targets tanpa loading indicator untuk seamless UX
+      const refreshTargets = async () => {
+        try {
+          const data = await storageService.getTahfidzTargets();
+          setTargets(data);
+        } catch (error) {
+          console.error("Error refreshing targets:", error);
+        }
+      };
+
+      refreshTargets();
+    }, [])
+  );
+
+  // Handle back button when in surah selection
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (showSurahList) {
+          setShowSurahList(false);
+          setSearchQuery("");
+          return true; // Prevent default back behavior
+        }
+        return false; // Allow default back behavior
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+      return () => backHandler.remove();
+    }, [showSurahList])
+  );
 
   const loadTargets = async () => {
     try {
@@ -108,6 +148,18 @@ export default function TahfidzPage() {
     router.push(`/(tahfidz)/detail/${target.id}`);
   };
 
+  // Filter surahs based on search query
+  const filteredSurahs = surahs.filter((surah) => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    return (
+      surah.name.transliteration.id.toLowerCase().includes(query) ||
+      surah.name.translation.id.toLowerCase().includes(query) ||
+      surah.number.toString().includes(query)
+    );
+  });
+
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-50">
@@ -122,12 +174,35 @@ export default function TahfidzPage() {
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="bg-blue-600 px-6 py-4 flex-row items-center">
           <TouchableOpacity
-            onPress={() => setShowSurahList(false)}
+            onPress={() => {
+              setShowSurahList(false);
+              setSearchQuery("");
+            }}
             className="mr-4"
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Text className="text-white text-xl font-bold">Pilih Surah</Text>
+        </View>
+
+        {/* Search Bar */}
+        <View className="px-4 py-3 bg-white border-b border-gray-200">
+          <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+            <Ionicons name="search" size={20} color="#9CA3AF" />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Cari nama surah atau nomor..."
+              className="flex-1 ml-2 text-gray-800"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
+          {searchQuery.trim() && (
+            <Text className="text-sm text-gray-500 mt-2">
+              Ditemukan {filteredSurahs.length} surah
+            </Text>
+          )}
         </View>
 
         {loadingSurahs ? (
@@ -138,7 +213,7 @@ export default function TahfidzPage() {
         ) : (
           <ScrollView className="flex-1">
             <View className="px-4 py-4">
-              {surahs.map((surah) => (
+              {filteredSurahs.map((surah) => (
                 <TouchableOpacity
                   key={surah.number}
                   onPress={() => createNewTarget(surah)}

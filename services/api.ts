@@ -1,74 +1,135 @@
 import { SurahResponse, SurahDetailResponse, AyahResponse } from "../types/api";
 import { cacheService } from "./cache";
+import { PerformanceTracker } from "../utils/performance";
 
 const API_BASE_URL = "https://api-ngaji-time.vercel.app";
 
 class ApiService {
-  private async fetchData<T>(endpoint: string): Promise<T> {
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    } catch (error) {
-      console.error("API Error:", error);
-      throw error;
+  private requestCache = new Map<string, Promise<any>>();
+  private requestTimeouts = new Map<string, any>();
+
+  private async fetchDataOptimized<T>(endpoint: string): Promise<T> {
+    const cacheKey = endpoint;
+
+    // Deduplicate identical requests
+    if (this.requestCache.has(cacheKey)) {
+      console.log(`🔄 Deduplicating request: ${endpoint}`);
+      return this.requestCache.get(cacheKey) as Promise<T>;
     }
+
+    const promise = PerformanceTracker.measureAsync(
+      `API-${endpoint.replace(/[^\w]/g, "-")}`,
+      async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            headers: {
+              "Accept-Encoding": "gzip", // Enable compression
+              "Cache-Control": "max-age=3600", // 1 hour cache
+              Accept: "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log(
+            `📡 API Response: ${endpoint} (${JSON.stringify(data).length} bytes)`
+          );
+          return data;
+        } catch (error) {
+          console.error(`API Error for ${endpoint}:`, error);
+          throw error;
+        }
+      }
+    );
+
+    // Cache the promise
+    this.requestCache.set(cacheKey, promise);
+
+    // Clear cache after 5 seconds to prevent memory leaks
+    const timeout = setTimeout(() => {
+      this.requestCache.delete(cacheKey);
+      this.requestTimeouts.delete(cacheKey);
+    }, 5000);
+
+    this.requestTimeouts.set(cacheKey, timeout);
+
+    // Clean up on promise completion
+    promise.finally(() => {
+      setTimeout(() => {
+        this.requestCache.delete(cacheKey);
+        const timeoutHandle = this.requestTimeouts.get(cacheKey);
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          this.requestTimeouts.delete(cacheKey);
+        }
+      }, 1000);
+    });
+
+    return promise;
+  }
+
+  // Legacy method for backward compatibility
+  private async fetchData<T>(endpoint: string): Promise<T> {
+    return this.fetchDataOptimized<T>(endpoint);
   }
 
   // Mendapatkan daftar semua surah (dengan cache)
   async getAllSurah(): Promise<SurahResponse> {
-    try {
-      // Cek cache terlebih dahulu
-      const cachedSurahs = await cacheService.getCachedSurahs();
-      if (cachedSurahs) {
-        console.log("Menggunakan cache untuk daftar surah");
-        return {
-          code: 200,
-          status: "OK",
-          message: "Success from cache",
-          data: cachedSurahs,
-        };
-      }
+    return PerformanceTracker.measureAsync("GetAllSurah", async () => {
+      try {
+        // Cek cache terlebih dahulu
+        const cachedSurahs = await cacheService.getCachedSurahs();
+        if (cachedSurahs) {
+          console.log("📱 Menggunakan cache untuk daftar surah");
+          return {
+            code: 200,
+            status: "OK",
+            message: "Success from cache",
+            data: cachedSurahs,
+          };
+        }
 
-      // Jika tidak ada cache, ambil dari API
-      console.log("Mengambil daftar surah dari API");
-      const response = await this.fetchData<SurahResponse>("/surah");
+        // Jika tidak ada cache, ambil dari API
+        console.log("📡 Mengambil daftar surah dari API");
+        const response = await this.fetchData<SurahResponse>("/surah");
 
-      // Cache hasilnya
-      if (response.data) {
-        await cacheService.cacheSurahs(response.data);
-      }
+        // Cache hasilnya
+        if (response.data) {
+          await cacheService.cacheSurahs(response.data);
+        }
 
-      return response;
-    } catch (error) {
-      // Jika error, coba gunakan cache lama (expired)
-      const cachedSurahs = await cacheService.getCachedSurahs();
-      if (cachedSurahs) {
-        console.log("API error, menggunakan cache lama");
-        return {
-          code: 200,
-          status: "OK",
-          message: "Success from expired cache",
-          data: cachedSurahs,
-        };
+        return response;
+      } catch (error) {
+        // Jika error, coba gunakan cache lama (expired)
+        const cachedSurahs = await cacheService.getCachedSurahs();
+        if (cachedSurahs) {
+          console.log("⚠️ API error, menggunakan cache lama");
+          return {
+            code: 200,
+            status: "OK",
+            message: "Success from expired cache",
+            data: cachedSurahs,
+          };
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
   }
 
-  // Mendapatkan detail surah beserta semua ayatnya (dengan cache)
+  // Mendapatkan detail surah beserta semua ayatnya (dengan cache dan auto-download)
   async getSurahDetail(surahNumber: number): Promise<SurahDetailResponse> {
     try {
       // Cek cache terlebih dahulu
-      const cachedAyahs = await cacheService.getCachedSurahDetail(surahNumber);
+      const cachedAyahs = await cacheService.getCachedSurah(surahNumber);
       if (cachedAyahs) {
         console.log(`Menggunakan cache untuk surah ${surahNumber}`);
         return {
           code: 200,
           status: "OK",
-          message: "Success from cache",
+          message: "Success from cache (offline)",
           data: cachedAyahs,
         };
       }
@@ -114,21 +175,29 @@ class ApiService {
         `Berhasil mengambil ${ayahs.length} ayat untuk surah ${surahNumber}`
       );
 
-      // Cache hasilnya
+      // Cache hasilnya untuk offline access
       await cacheService.cacheSurahDetail(surahNumber, ayahs);
+
+      // Auto-download mark for statistics
+      cacheService.autoDownloadSurah(surahNumber).catch((error) => {
+        console.warn(
+          `Failed to mark auto-download for Surah ${surahNumber}:`,
+          error
+        );
+      });
 
       // Return dalam format yang diharapkan
       return {
         code: 200,
         status: "OK",
-        message: "Success",
+        message: "Success (auto-cached)",
         data: ayahs,
       };
     } catch (error) {
       console.error(`Error fetching surah ${surahNumber}:`, error);
 
       // Jika error, coba gunakan cache lama (expired)
-      const cachedAyahs = await cacheService.getCachedSurahDetail(surahNumber);
+      const cachedAyahs = await cacheService.getCachedSurah(surahNumber);
       if (cachedAyahs) {
         console.log(
           `API error, menggunakan cache lama untuk surah ${surahNumber}`

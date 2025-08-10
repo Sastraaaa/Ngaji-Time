@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../services/storage";
 import { BookmarkAyah } from "../types/api";
@@ -19,9 +19,24 @@ export default function FavoritPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkAyah[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadBookmarks();
+  // Load bookmarks setiap kali halaman difokuskan
+  const loadBookmarks = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await storageService.getBookmarks();
+      setBookmarks(data);
+    } catch (error) {
+      console.error("Error loading bookmarks:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBookmarks();
+    }, [loadBookmarks])
+  );
 
   // Handle hardware back button untuk Android - kembali ke beranda
   useFocusEffect(
@@ -39,18 +54,6 @@ export default function FavoritPage() {
       return () => backHandler.remove();
     }, [router])
   );
-
-  const loadBookmarks = async () => {
-    try {
-      setLoading(true);
-      const data = await storageService.getBookmarks();
-      setBookmarks(data);
-    } catch (error) {
-      console.error("Error loading bookmarks:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const removeBookmark = async (surahNumber: number, ayahNumber: number) => {
     Alert.alert(
