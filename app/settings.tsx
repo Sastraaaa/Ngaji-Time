@@ -29,12 +29,18 @@ export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [cacheInfo, setCacheInfo] = useState<any>(null);
+  const [cacheStats, setCacheStats] = useState({
+    cachedSurahs: 0,
+    totalSurahs: 114,
+    percentage: 0,
+  });
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   useEffect(() => {
     loadCacheInfo();
+    loadCacheStats();
   }, []);
 
   // Handle hardware back button untuk Android - kembali ke beranda
@@ -63,10 +69,56 @@ export default function SettingsPage() {
     }
   };
 
+  const loadCacheStats = async () => {
+    try {
+      const stats = await cacheService.getCacheStatistics();
+      setCacheStats(stats);
+    } catch (error) {
+      console.error("Error loading cache stats:", error);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    Alert.alert(
+      "Download Semua Surah",
+      "Mengunduh semua surah Al-Qur'an untuk akses offline. Proses ini membutuhkan koneksi internet yang stabil dan ruang penyimpanan sekitar 50MB.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Download",
+          onPress: async () => {
+            setShowDownloadModal(true);
+            setDownloadingAll(true);
+            setDownloadProgress(0);
+
+            try {
+              await cacheService.downloadAllSurahs((progress) => {
+                setDownloadProgress(progress);
+              });
+
+              await loadCacheStats(); // Refresh stats
+              Alert.alert("Berhasil", "Semua surah telah berhasil diunduh!");
+            } catch (error) {
+              console.error("Download error:", error);
+              Alert.alert(
+                "Error",
+                "Gagal mengunduh semua surah. Pastikan koneksi internet stabil."
+              );
+            } finally {
+              setDownloadingAll(false);
+              setDownloadProgress(0);
+              setShowDownloadModal(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const clearCache = async () => {
     Alert.alert(
       "Hapus Cache",
-      "Apakah Anda yakin ingin menghapus semua data cache? Data akan diunduh ulang saat diperlukan.",
+      "Menghapus semua data offline yang tersimpan. Anda akan memerlukan koneksi internet untuk membaca Al-Qur'an setelah ini.",
       [
         { text: "Batal", style: "cancel" },
         {
@@ -77,10 +129,11 @@ export default function SettingsPage() {
               setLoading(true);
               await cacheService.clearCache();
               await loadCacheInfo();
-              Alert.alert("Berhasil", "Cache berhasil dihapus");
+              await loadCacheStats();
+              Alert.alert("Berhasil", "Cache telah berhasil dihapus!");
             } catch (error) {
               console.error("Error clearing cache:", error);
-              Alert.alert("Error", "Gagal menghapus cache");
+              Alert.alert("Error", "Gagal menghapus cache.");
             } finally {
               setLoading(false);
             }
@@ -90,89 +143,34 @@ export default function SettingsPage() {
     );
   };
 
-  const preloadSurahs = async () => {
-    try {
-      setLoading(true);
-      await cacheService.preloadEssentialSurahs();
-      await loadCacheInfo();
-      Alert.alert("Berhasil", "Surah penting berhasil diunduh untuk offline");
-    } catch (error) {
-      console.error("Error preloading surahs:", error);
-      Alert.alert("Error", "Gagal mengunduh surah penting");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadAllSurahs = async () => {
-    Alert.alert(
-      "Download Semua Surah",
-      "Apakah Anda ingin mendownload semua 114 surah untuk akses offline penuh? Ini membutuhkan sekitar 50-100 MB storage.",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Download",
-          onPress: async () => {
-            try {
-              setShowDownloadModal(true);
-              setDownloadingAll(true);
-              setDownloadProgress(0);
-
-              await cacheService.preloadAllSurahs((current, total) => {
-                const progress = (current / total) * 100;
-                setDownloadProgress(progress);
-              });
-
-              setDownloadingAll(false);
-              await loadCacheInfo();
-
-              setTimeout(() => {
-                setShowDownloadModal(false);
-                Alert.alert(
-                  "Berhasil",
-                  "Semua surah berhasil didownload untuk offline!"
-                );
-              }, 2000);
-            } catch (error) {
-              console.error("Error downloading all surahs:", error);
-              setDownloadingAll(false);
-              setShowDownloadModal(false);
-              Alert.alert("Error", "Gagal mendownload semua surah");
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const settingsItems: { title: string; items: SettingsItem[] }[] = [
     {
-      title: "Download Offline",
+      title: "Status Cache Offline",
       items: [
         {
-          title: "Unduh Surah Penting",
-          subtitle: "Unduh 10 surah penting untuk akses offline",
-          icon: "download",
+          title: "Surah Tersimpan",
+          subtitle: `${cacheStats.cachedSurahs}/${cacheStats.totalSurahs} (${cacheStats.percentage}%)`,
+          icon: "library",
           color: "text-green-600",
           bgColor: "bg-green-100",
-          onPress: preloadSurahs,
-        },
-        {
-          title: "Download Semua Surah",
-          subtitle: "Download semua 114 surah untuk offline penuh",
-          icon: "cloud-download",
-          color: "text-blue-600",
-          bgColor: "bg-blue-100",
-          onPress: downloadAllSurahs,
+          showArrow: false,
         },
       ],
     },
     {
-      title: "Cache Management",
+      title: "Download Offline",
       items: [
         {
+          title: "Download Semua Surah",
+          subtitle: "Unduh seluruh Al-Qur'an untuk akses offline",
+          icon: "download",
+          color: "text-blue-600",
+          bgColor: "bg-blue-100",
+          onPress: handleDownloadAll,
+        },
+        {
           title: "Hapus Cache",
-          subtitle: "Bersihkan data cache yang tersimpan",
+          subtitle: "Menghapus semua data offline yang tersimpan",
           icon: "trash",
           color: "text-red-600",
           bgColor: "bg-red-100",
@@ -181,7 +179,7 @@ export default function SettingsPage() {
       ],
     },
     {
-      title: "Informasi Cache",
+      title: "Informasi Aplikasi",
       items: [
         {
           title: "Status Cache",
