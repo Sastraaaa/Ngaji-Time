@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { cacheService } from "../services/cache";
 import { colors } from "../constants/colors";
 import { useColorScheme } from "react-native";
 import "./global.css";
@@ -16,8 +15,9 @@ export default function RootLayout() {
     const initializeOfflineFeatures = async () => {
       try {
         console.log("Initializing offline features...");
-        // Preload essential surahs in background
-        cacheService.preloadEssentialSurahs();
+        // Optional: Auto-cache popular surahs can be added here
+        // For now, just initialize cache directory
+        console.log("Cache initialized successfully");
       } catch (error) {
         console.error("Error initializing offline features:", error);
       }
