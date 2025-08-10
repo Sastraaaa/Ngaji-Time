@@ -128,6 +128,7 @@ export default function SurahDetailPage() {
   const router = useRouter();
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [bookmarkedAyahs, setBookmarkedAyahs] = useState<Set<number>>(
     new Set()
   );
@@ -143,6 +144,7 @@ export default function SurahDetailPage() {
   const loadSurahDetail = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null); // Reset error state
       console.log(`Loading surah detail for surah ${id}`);
 
       const response = await apiService.getSurahDetail(parseInt(id));
@@ -191,7 +193,7 @@ export default function SurahDetailPage() {
         error instanceof Error
           ? error.message
           : "Pastikan koneksi internet Anda stabil.";
-      Alert.alert("Error", `Gagal memuat surah ${id}. ${errorMessage}`);
+      setError(`Gagal memuat surah ${id}. ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -239,6 +241,13 @@ export default function SurahDetailPage() {
   const handleBackButton = () => {
     // Selalu kembali ke mushaf untuk konsistensi
     router.replace("/mushaf");
+  };
+
+  // Retry function untuk handle error
+  const handleRetry = () => {
+    setError(null);
+    loadSurahDetail();
+    loadBookmarks();
   };
 
   // Memoized filtered ayahs untuk performa optimal
@@ -406,6 +415,51 @@ export default function SurahDetailPage() {
     setSearchQuery("");
     setShowSearch(false);
   };
+
+  // Error Screen
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 justify-center items-center px-6">
+          <View className="bg-white rounded-lg p-6 mx-4 border border-red-200">
+            <View className="items-center mb-4">
+              <Ionicons name="alert-circle" size={64} color="#ef4444" />
+            </View>
+
+            <Text className="text-center text-xl font-bold text-gray-800 mb-2">
+              Terjadi Kesalahan
+            </Text>
+
+            <Text className="text-center text-gray-600 mb-6 leading-relaxed">
+              {error}
+            </Text>
+
+            <View className="space-y-3">
+              <TouchableOpacity
+                onPress={handleRetry}
+                className="bg-purple-600 py-3 px-6 rounded-lg"
+                activeOpacity={0.7}
+              >
+                <Text className="text-center text-white font-semibold">
+                  Coba Lagi
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleBackButton}
+                className="bg-gray-200 py-3 px-6 rounded-lg"
+                activeOpacity={0.7}
+              >
+                <Text className="text-center text-gray-700 font-medium">
+                  Kembali ke Daftar Surah
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (loading) {
     return (
