@@ -1,18 +1,10 @@
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storageService } from "../services/storage";
-import { cacheService } from "../services/cache";
 import { LastRead } from "../types/api";
 import { tw } from "../constants/colors";
 import ShalatCard from "../components/ShalatCard";
@@ -20,9 +12,6 @@ import ShalatCard from "../components/ShalatCard";
 export default function Index() {
   const router = useRouter();
   const [lastRead, setLastRead] = useState<LastRead | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const loadLastRead = useCallback(async () => {
     try {
@@ -34,44 +23,12 @@ export default function Index() {
     }
   }, []);
 
-  useEffect(() => {
-    checkAndDownloadSurahs();
-  }, []);
-
   // Reload last read setiap kali halaman menjadi focus
   useFocusEffect(
     useCallback(() => {
       loadLastRead();
     }, [loadLastRead])
   );
-
-  const checkAndDownloadSurahs = async () => {
-    try {
-      const isDownloaded = await cacheService.isAllSurahsDownloaded();
-      if (!isDownloaded) {
-        setShowDownloadModal(true);
-        setIsDownloading(true);
-
-        // Download hanya beberapa surah penting dulu untuk demo
-        // Nanti bisa diubah jadi semua surah
-        console.log("Starting essential surahs download...");
-        await cacheService.preloadEssentialSurahs();
-
-        // Mark as downloaded untuk demo
-        await cacheService.markAllSurahsDownloaded();
-
-        setDownloadProgress(100);
-        setIsDownloading(false);
-        setTimeout(() => {
-          setShowDownloadModal(false);
-        }, 2000);
-      }
-    } catch (error) {
-      console.error("Error downloading surahs:", error);
-      setIsDownloading(false);
-      setShowDownloadModal(false);
-    }
-  };
 
   const navigateToLastRead = () => {
     if (lastRead) {
@@ -223,52 +180,6 @@ export default function Index() {
           </View>
         </View>
       </ScrollView>
-
-      {/* Download Progress Modal */}
-      <Modal
-        visible={showDownloadModal}
-        transparent={true}
-        animationType="fade"
-      >
-        <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
-          <View className="bg-white rounded-xl p-6 m-6 shadow-lg">
-            <Text className="text-lg font-bold text-gray-800 text-center mb-4">
-              Menyiapkan Al-Qur&apos;an Offline
-            </Text>
-
-            {isDownloading ? (
-              <>
-                <ActivityIndicator size="large" color="#059669" />
-                <Text className="text-center text-gray-600 mt-4">
-                  Mendownload surah... {Math.round(downloadProgress)}%
-                </Text>
-                <View className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <View
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${downloadProgress}%` }}
-                  />
-                </View>
-                <Text className="text-center text-sm text-gray-500 mt-2">
-                  Tunggu sebentar, kami sedang menyiapkan semua surah untuk
-                  dibaca offline
-                </Text>
-              </>
-            ) : (
-              <>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={48}
-                  color="#059669"
-                  style={{ alignSelf: "center" }}
-                />
-                <Text className="text-center text-green-600 mt-2 font-medium">
-                  Siap untuk dibaca offline!
-                </Text>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
